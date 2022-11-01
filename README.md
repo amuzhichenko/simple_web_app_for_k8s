@@ -1,1 +1,1 @@
-# simple_web_app_for_k8s
+# Simple Python app for k8s
