@@ -1,0 +1,120 @@
+
+pipeline {
+  environment {
+    imagename = "amuzhichenko/simple_web"
+    registry = "registry.hub.docker.com"
+    credential = 'dockerhub'
+    app_status = "sh  kubectl get pods --namespace=prod | grep my-app | awk '{print ${3}}'"
+
+  }
+  
+  
+  agent any
+
+
+  stages {
+
+    stage('Checkout Source') {
+      steps {
+        git url:'https://github.com/amuzhichenko/simple_web_app_for_k8s.git', branch:'main'
+      }
+    }
+
+    
+    stage("Build image") {
+      steps {
+        script {
+            //myapp = docker.build("$imagename1:${env.BUILD_ID}", "./")
+          dockerImage = docker.build("$imagename:${env.BUILD_ID}", "./")
+          sh "echo '$imagename:${env.BUILD_ID} was built!'"
+          }
+        }
+    }
+
+    
+     stage ("Validation dockerfile with hadolint") {
+    
+     steps {
+         sh 'hadolint Dockerfile > hadolint_lint.txt'
+     }
+     post {
+         always {
+             archiveArtifacts 'hadolint_lint.txt'
+         }
+  }
+  }
+    
+    
+
+stage ("Test image")  {
+    steps {
+        sh "docker run -d -p 8000:8000 $imagename:${env.BUILD_ID}"
+        sh "sleep 5"
+        sh "curl localhost:8000"
+        sh 'docker rm -vf $(docker ps -a -q)'
+    }
+    
+}
+    
+    
+stage("Push image") {
+      steps {
+        script {
+              docker.withRegistry('', credential ) {
+              dockerImage.push("${env.BUILD_ID}")
+              }
+              }
+          }
+        }    
+
+
+stage ("Deploy in pre-prod ns")  {
+    steps {
+    sh "minikube start"    
+    sh "minikube status"
+    sh "kubectl run my-app --image=$imagename:${env.BUILD_ID} --namespace=pre-prod --port=8000"
+} 
+    
+  }
+ 
+ 
+stage("Manual approvment") {
+            input {
+                message "Ready to deploy?"
+                ok "Yes"
+            }
+            steps {
+                echo "Deployment stage."
+            }
+        }
+  
+  
+  stage ("Deploy in prod ns")  {
+    steps {
+    //sh "minikube start"    
+    //sh "minikube status"
+    sh "kubectl run my-app --image=$imagename:${env.BUILD_ID} --namespace=prod --port=8000"
+} 
+    
+  }
+  
+  
+  stage ("Cleaning: remove deployment from pre-prod") {
+      steps {
+          sh "kubectl delete pods my-app --namespace=pre-prod"
+      
+  }
+    }
+       }
+  
+  post ("Slack notification") {
+            success {
+                slackSend (color: '#00FF00', message: "SUCCESSFUL: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
+            }
+            failure {
+                slackSend (color: '#FF0000', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'")
+            }
+    
+  }
+
+}
