@@ -1,16 +1,12 @@
-
 pipeline {
   environment {
     imagename = "amuzhichenko/simple_web"
     registry = "registry.hub.docker.com"
     credential = 'dockerhub'
     
-
   }
   
-  
   agent any
-
 
   stages {
 
@@ -19,6 +15,26 @@ pipeline {
         git url:'https://github.com/amuzhichenko/simple_web_app_for_k8s.git', branch:'main'
       }
     }
+
+  stage ("Validation dockerfile with hadolint") {
+    
+     steps {
+         sh 'hadolint Dockerfile > hadolint_lint.txt'
+     }
+     post {
+         always {
+             archiveArtifacts 'hadolint_lint.txt'
+         }
+         success {
+                echo 'Validation Successful . . .'
+            }
+         failure {
+                echo 'Validation stage failed'
+                error('Stopping pipeline…')
+
+             }
+  }
+  }
 
     
     stage("Build image") {
@@ -32,7 +48,7 @@ pipeline {
         
         post {
             success {
-                echo 'Compile Stage Successful . . .'
+                echo 'Stage Successful . . .'
             }
             failure {
                 echo 'Compile stage failed'
@@ -43,19 +59,6 @@ pipeline {
     }
 
     
-     stage ("Validation dockerfile with hadolint") {
-    
-     steps {
-         sh 'hadolint Dockerfile > hadolint_lint.txt'
-     }
-     post {
-         always {
-             archiveArtifacts 'hadolint_lint.txt'
-         }
-  }
-  }
-    
-    
 
 stage ("Test image")  {
     steps {
@@ -65,8 +68,18 @@ stage ("Test image")  {
         sh 'docker rm -vf $(docker ps -a -q)'
     }
     
-}
+    post {
+            success {
+                echo 'Stage Test Image uccessful . . .'
+            }
+            failure {
+                echo 'Test stage failed'
+                error('Stop..…')
+
+             }
+    }
     
+}
     
 stage("Push image") {
       steps {
@@ -76,6 +89,18 @@ stage("Push image") {
               }
               }
           }
+          
+          post {
+            success {
+                echo 'Push Stage Image uccessful . . .'
+            }
+            failure {
+                echo 'Push stage failed'
+                error('Stop..…')
+
+             }
+    }
+          
         }    
 
 
@@ -86,37 +111,34 @@ stage ("Deploy in pre-prod ns")  {
     sh "kubectl run my-app --image=$imagename:${env.BUILD_ID} --namespace=pre-prod --port=8000"
     sh "sleep 5"
 } 
+   
+   post {
+            success {
+                echo 'Deploy in pre-prod namespace DONE!!! . . .'
+            }
+            failure {
+                echo 'Deploy in pre-prod namespace FAILURE!!(...'
+                error('Stop..…')
+
+             }
+    } 
+   
     
   }
  
- //stage ("Test deppoyment in pre-prod")  {
-     //steps {
-         
-
-        // sh """#!/bin/bash
-        
-        //app_status=`kubectl get pods --namespace=pre-prod | grep my-app | awk {\'print ${3}\'}'`
-       
-        
-        // if [ "$app_status" == "Running" ]
-        // then
-        // echo "Status deployment is $app_status"
-        // else
-        // echo "Deployment in pre-prod namespace was failed"
-        // exit 1
-        // fi
-    
-
-         
-   //  }
+ stage ("Test deppoyment in pre-prod")  {
+     steps {
+         sh "chmod +x test_pre-deploy.sh"
+ sh  "./test_pre-deploy.sh"
+     }
      
- //}
+ }
  
  
 stage("Manual approvment") {
       //timeout(time: 5, unit: "MINUTES") {
             input {
-                message "Ready to deploy?"
+                message "Deployment in pre-prod was done. Ready to deploy in prod?"
                 ok "Yes"
             }
             steps {
@@ -127,13 +149,24 @@ stage("Manual approvment") {
 
 
 
-  stage ("Deploy in prod ns")  {
+  stage ("Deploy in prod namespace")  {
     steps {
     //sh "minikube start"    
     //sh "minikube status"
     //sh "kubectl delete pod my-app --namespace=prod"
     sh "kubectl run my-app --image=$imagename:${env.BUILD_ID} --namespace=prod --port=8000"
 } 
+   
+    post {
+            success {
+                echo 'Congratulations!!!Deploy in prod namespace successful !!!!!. . .'
+            }
+            failure {
+                echo 'Deploy in prod namespace failed'
+                error('Stop..…')
+
+             }
+    }
     
   }
   
@@ -158,3 +191,4 @@ stage("Manual approvment") {
   }
 
 }
+
