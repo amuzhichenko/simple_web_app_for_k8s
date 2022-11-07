@@ -1,3 +1,4 @@
+
 pipeline {
   environment {
     imagename = "amuzhichenko/simple_web"
@@ -40,7 +41,6 @@ pipeline {
     stage("Build image") {
       steps {
         script {
-            //myapp = docker.build("$imagename1:${env.BUILD_ID}", "./")
           dockerImage = docker.build("$imagename:${env.BUILD_ID}", "./")
           sh "echo '$imagename:${env.BUILD_ID} was built!'"
           }
@@ -106,7 +106,7 @@ stage("Push image") {
 
 stage ("Deploy in pre-prod ns")  {
     steps {
-    sh "minikube start"    
+    //sh "minikube start"    
     sh "minikube status"
     sh "kubectl run my-app --image=$imagename:${env.BUILD_ID} --namespace=pre-prod --port=8000"
     sh "sleep 5"
@@ -151,7 +151,6 @@ stage("Manual approvment") {
 
   stage ("Deploy in prod namespace")  {
     steps {
-    //sh "minikube start"    
     //sh "minikube status"
     //sh "kubectl delete pod my-app --namespace=prod"
     sh "kubectl run my-app --image=$imagename:${env.BUILD_ID} --namespace=prod --port=8000"
@@ -191,4 +190,3 @@ stage("Manual approvment") {
   }
 
 }
-
